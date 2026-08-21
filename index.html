@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>TinySpeech · Audio Test Bench</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="rack">
+      <header class="rack-head">
+        <div class="brand">
+          <span class="brand-mark" aria-hidden="true"></span>
+          <span class="brand-text">
+            <strong>TINYSPEECH</strong>
+            <small>audio test bench</small>
+          </span>
+        </div>
+
+        <div class="head-right">
+          <div class="device" title="Trạng thái model trên server">
+            <span id="health-dot" class="led unknown"></span>
+            <span class="device-label">SERVER</span>
+            <span id="health-text" class="device-value">chưa kiểm tra</span>
+            <button id="health-btn" type="button" class="btn-icon" title="Kiểm tra lại /health">⟳</button>
+          </div>
+        </div>
+      </header>
+
+      <main class="bench">
+        <!-- ================= INPUT ================= -->
+        <section class="module strip" aria-label="Input channel">
+          <div class="module-head">
+            <h2>Input</h2>
+            <span class="module-tag">ch 01 · mic</span>
+          </div>
+
+          <div class="scope">
+            <canvas id="scope" width="720" height="180"></canvas>
+            <span id="scope-badge" class="scope-badge">idle</span>
+          </div>
+
+          <div class="meter-block">
+            <div class="meter-scale">
+              <span>-∞</span><span>-24</span><span>-12</span><span>-6</span><span>0</span>
+            </div>
+            <div id="meter" class="meter" aria-hidden="true"></div>
+            <div class="meter-legend">
+              <span>PEAK</span>
+              <span id="peak-value" class="mono">—</span>
+            </div>
+          </div>
+
+          <div class="transport">
+            <button id="record-btn" type="button" class="btn-rec">
+              <span class="rec-dot"></span>
+              <span class="rec-label">RECORD</span>
+              <span class="rec-hint">space</span>
+            </button>
+            <div class="clip">
+              <span class="clip-time mono" id="clip-time">00:00.00</span>
+              <span class="clip-meta" id="clip-meta">chưa có bản ghi</span>
+            </div>
+          </div>
+
+          <div class="transport-row">
+            <button id="send-btn" type="button" class="btn-primary" disabled>Gửi lên server</button>
+            <button id="download-btn" type="button" class="btn-ghost" disabled>Tải .wav</button>
+          </div>
+
+          <audio id="playback" controls hidden></audio>
+
+          <label class="drop" id="drop-zone">
+            <input id="file-input" type="file" accept="audio/*" />
+            <span class="drop-icon" aria-hidden="true">⇪</span>
+            <span class="drop-text">Kéo thả hoặc chọn file audio có sẵn<br /><small>tự chuyển mono 16 kHz</small></span>
+          </label>
+        </section>
+
+        <!-- ================= ROUTING ================= -->
+        <section class="module patch" aria-label="Routing">
+          <div class="module-head">
+            <h2>Routing</h2>
+            <span class="module-tag">signal path</span>
+          </div>
+
+          <label class="field">
+            <span class="field-label">Server</span>
+            <input id="base-url" type="text" value="http://localhost:8000" spellcheck="false" />
+          </label>
+
+          <fieldset class="routes">
+            <legend class="field-label">Endpoint</legend>
+            <label class="route">
+              <input type="radio" name="endpoint" value="/transcribe" checked />
+              <span class="route-body">
+                <strong>/transcribe</strong>
+                <small>STT thuần · trả transcript</small>
+              </span>
+            </label>
+            <label class="route">
+              <input type="radio" name="endpoint" value="/api/speech/recognize" />
+              <span class="route-body">
+                <strong>/api/speech/recognize</strong>
+                <small>text + confidence</small>
+              </span>
+            </label>
+            <label class="route">
+              <input type="radio" name="endpoint" value="/api/speech/assess" />
+              <span class="route-body">
+                <strong>/api/speech/assess</strong>
+                <small>chấm phát âm · cần expected text</small>
+              </span>
+            </label>
+          </fieldset>
+
+          <div class="field-row">
+            <label class="field">
+              <span class="field-label">Language</span>
+              <input id="language" type="text" value="en" spellcheck="false" />
+            </label>
+            <label class="switch">
+              <input id="auto-send" type="checkbox" checked />
+              <span class="switch-track"><span class="switch-knob"></span></span>
+              <span class="switch-text">Auto-send<br /><small>gửi ngay khi dừng ghi</small></span>
+            </label>
+          </div>
+
+          <label class="field" id="expected-wrap" hidden>
+            <span class="field-label">Expected text</span>
+            <input id="expected-text" type="text" placeholder="ví dụ: apple" />
+          </label>
+
+          <p class="note">
+            Model chạy tuần tự (<span class="mono">concurrency 1</span>) — tool khoá transport khi đang có
+            request.
+          </p>
+        </section>
+
+        <!-- ================= OUTPUT ================= -->
+        <section class="module output" aria-label="Kết quả nhận diện">
+          <div class="module-head">
+            <h2>Transcript</h2>
+            <span id="status-tag" class="module-tag">ready</span>
+          </div>
+
+          <div class="readout">
+            <p id="transcript" class="readout-text placeholder">Văn bản server trả về sẽ hiện ở đây…</p>
+          </div>
+
+          <div class="gauges" id="gauges"></div>
+
+          <details class="raw">
+            <summary>JSON thô</summary>
+            <pre id="raw-json">—</pre>
+          </details>
+
+          <div class="takes-head">
+            <h3>Takes</h3>
+            <button id="clear-history" type="button" class="btn-icon" title="Xoá lịch sử">✕</button>
+          </div>
+          <ol id="history" class="takes">
+            <li class="takes-empty">Chưa có lần thử nào.</li>
+          </ol>
+        </section>
+      </main>
+    </div>
+
+    <script type="module" src="app.js"></script>
+  </body>
+</html>
