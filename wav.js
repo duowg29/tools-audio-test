@@ -88,3 +88,37 @@ export function peakLevel(samples) {
   }
   return peak;
 }
+
+export function rms(samples, from = 0, to = samples.length) {
+  if (to <= from) return 0;
+  let sum = 0;
+  for (let i = from; i < to; i++) sum += samples[i] * samples[i];
+  return Math.sqrt(sum / (to - from));
+}
+
+/** Port của `wavBytesLikelyContainSpeech` (flashcard_audio_recording_service.dart:51).
+ *
+ * Thiết bị thật KHÔNG gửi clip không có năng lượng tiếng nói — nó lặng lẽ bỏ
+ * qua. Bench mà cứ gửi là đang đo một tình huống không tồn tại trong thực tế.
+ *
+ * Bản Dart đọc PCM16 rồi chia 32768; chạy thẳng trên Float32 trước lúc encode là
+ * tương đương, chỉ lệch phần lượng tử hoá.
+ */
+export function likelyContainsSpeech(
+  samples,
+  { minRms = 0.006, minPeakFrameRms = 0.012, frameSamples = 320 } = {},
+) {
+  const overall = rms(samples);
+  let peakFrame = 0;
+  for (let start = 0; start + frameSamples <= samples.length; start += frameSamples) {
+    const r = rms(samples, start, start + frameSamples);
+    if (r > peakFrame) peakFrame = r;
+  }
+  return {
+    ok: overall > minRms || peakFrame > minPeakFrameRms,
+    rms: overall,
+    peakFrameRms: peakFrame,
+  };
+}
+
+export const dbfs = (level) => (level > 0 ? 20 * Math.log10(level) : -Infinity);

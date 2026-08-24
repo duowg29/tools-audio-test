@@ -19,17 +19,22 @@
           <span class="brand-mark" aria-hidden="true"></span>
           <span class="brand-text">
             <strong>TINYSPEECH</strong>
-            <small>audio test bench</small>
+            <small>audio test bench · device-like</small>
           </span>
         </div>
 
         <div class="head-right">
-          <div class="device" title="Trạng thái model trên server">
+          <div class="device" title="Luật health của app: warm != true cũng coi là chết">
             <span id="health-dot" class="led unknown"></span>
-            <span class="device-label">SERVER</span>
+            <span class="device-label">SPEECH</span>
             <span id="health-text" class="device-value">chưa kiểm tra</span>
-            <button id="health-btn" type="button" class="btn-icon" title="Kiểm tra lại /health">⟳</button>
           </div>
+          <div class="device" title="Có gateway :8090 phía trước thì mới gọi được /otg/*">
+            <span id="gw-dot" class="led unknown"></span>
+            <span class="device-label">GATEWAY</span>
+            <span id="gw-text" class="device-value">—</span>
+          </div>
+          <button id="health-btn" type="button" class="btn-icon" title="Kiểm tra lại">⟳</button>
         </div>
       </header>
 
@@ -38,7 +43,7 @@
         <section class="module strip" aria-label="Input channel">
           <div class="module-head">
             <h2>Input</h2>
-            <span class="module-tag">ch 01 · mic</span>
+            <span class="module-tag" id="input-tag">ch 01 · mic</span>
           </div>
 
           <div class="scope">
@@ -48,11 +53,15 @@
 
           <div class="meter-block">
             <div class="meter-scale">
-              <span>-∞</span><span>-24</span><span>-12</span><span>-6</span><span>0</span>
+              <span>-∞</span><span>-48</span><span>-30</span><span>-12</span><span>0</span>
             </div>
-            <div id="meter" class="meter" aria-hidden="true"></div>
+            <div id="meter" class="meter" aria-hidden="true">
+              <i class="tick tick-on" id="tick-on"></i>
+              <i class="tick tick-off" id="tick-off"></i>
+            </div>
             <div class="meter-legend">
               <span>PEAK</span>
+              <span id="gate-state" class="mono">armed</span>
               <span id="peak-value" class="mono">—</span>
             </div>
           </div>
@@ -76,6 +85,34 @@
 
           <audio id="playback" controls hidden></audio>
 
+          <details class="tuning">
+            <summary>Tinh chỉnh cổng thu</summary>
+            <p class="note note-sm">
+              Trình duyệt thu qua AGC/noise-suppression nên −52 dBFS không đánh dấu đúng cùng một sự
+              kiện âm học như trên máy Android. Đây là <b>device-like</b>, không phải device-identical.
+            </p>
+            <div class="field-row">
+              <label class="field">
+                <span class="field-label">Gate on (dB)</span>
+                <input id="gate-on" type="text" inputmode="numeric" />
+              </label>
+              <label class="field">
+                <span class="field-label">Gate off (dB)</span>
+                <input id="gate-off" type="text" inputmode="numeric" />
+              </label>
+            </div>
+            <label class="switch">
+              <input id="auto-stop" type="checkbox" checked />
+              <span class="switch-track"><span class="switch-knob"></span></span>
+              <span class="switch-text">Tự dừng (VAD)<br /><small>tắt = bấm dừng thủ công</small></span>
+            </label>
+            <label class="switch">
+              <input id="raw-mic" type="checkbox" />
+              <span class="switch-track"><span class="switch-knob"></span></span>
+              <span class="switch-text">Raw mic<br /><small>tắt AGC / khử vọng / khử ồn</small></span>
+            </label>
+          </details>
+
           <label class="drop" id="drop-zone">
             <input id="file-input" type="file" accept="audio/*" />
             <span class="drop-icon" aria-hidden="true">⇪</span>
@@ -87,74 +124,133 @@
         <section class="module patch" aria-label="Routing">
           <div class="module-head">
             <h2>Routing</h2>
-            <span class="module-tag">signal path</span>
+            <span class="module-tag">đường của thiết bị</span>
           </div>
 
           <label class="field">
-            <span class="field-label">Server</span>
-            <input id="base-url" type="text" value="http://localhost:8000" spellcheck="false" />
+            <span class="field-label">Server (qua relay same-origin)</span>
+            <input id="base-url" type="text" spellcheck="false" />
           </label>
 
           <fieldset class="routes">
-            <legend class="field-label">Endpoint</legend>
+            <legend class="field-label">Mode</legend>
             <label class="route">
-              <input type="radio" name="endpoint" value="/transcribe" checked />
+              <input type="radio" name="mode" value="flashcard" checked />
               <span class="route-body">
-                <strong>/transcribe</strong>
-                <small>STT thuần · trả transcript</small>
+                <strong>FLASHCARD</strong>
+                <small>/api/speech/assess · chấm phát âm</small>
               </span>
             </label>
             <label class="route">
-              <input type="radio" name="endpoint" value="/api/speech/recognize" />
+              <input type="radio" name="mode" value="otg" />
               <span class="route-body">
-                <strong>/api/speech/recognize</strong>
-                <small>text + confidence</small>
+                <strong>ON-THE-GO</strong>
+                <small>/otg/intent/voice · audio → intent</small>
               </span>
             </label>
             <label class="route">
-              <input type="radio" name="endpoint" value="/api/speech/assess" />
+              <input type="radio" name="mode" value="dataset" />
               <span class="route-body">
-                <strong>/api/speech/assess</strong>
-                <small>chấm phát âm · cần expected text</small>
+                <strong>DATASET</strong>
+                <small>ghi mẫu vào fixtures/real</small>
               </span>
             </label>
           </fieldset>
 
-          <div class="field-row">
+          <!-- flashcard -->
+          <div class="fields" data-for="flashcard">
+            <label class="field">
+              <span class="field-label">Expected text</span>
+              <input id="expected-text" type="text" placeholder="ví dụ: ship" />
+            </label>
             <label class="field">
               <span class="field-label">Language</span>
               <input id="language" type="text" value="en" spellcheck="false" />
             </label>
-            <label class="switch">
-              <input id="auto-send" type="checkbox" checked />
-              <span class="switch-track"><span class="switch-knob"></span></span>
-              <span class="switch-text">Auto-send<br /><small>gửi ngay khi dừng ghi</small></span>
+          </div>
+
+          <!-- on-the-go -->
+          <div class="fields" data-for="otg" hidden>
+            <label class="field">
+              <span class="field-label">current_screen</span>
+              <input id="otg-screen" type="text" list="otg-screens" value="main_tab:games" />
+              <datalist id="otg-screens"></datalist>
+            </label>
+            <label class="field">
+              <span class="field-label">current_mode</span>
+              <select id="otg-mode"></select>
+            </label>
+            <label class="field">
+              <span class="field-label">current_activity <small>(rỗng = không gửi field)</small></span>
+              <input id="otg-activity" type="text" placeholder="để trống nếu không có" />
             </label>
           </div>
 
-          <label class="field" id="expected-wrap" hidden>
-            <span class="field-label">Expected text</span>
-            <input id="expected-text" type="text" placeholder="ví dụ: apple" />
+          <!-- dataset -->
+          <div class="fields" data-for="dataset" hidden>
+            <label class="field">
+              <span class="field-label">Từ mong đợi</span>
+              <input id="ds-word" type="text" list="ds-words" placeholder="ship" />
+              <datalist id="ds-words"></datalist>
+            </label>
+            <div class="pairs" id="ds-pairs"></div>
+            <fieldset class="labels">
+              <legend class="field-label">Nhãn</legend>
+              <label class="chip"><input type="radio" name="ds-label" value="dung" checked /><span>dung</span></label>
+              <label class="chip"><input type="radio" name="ds-label" value="ngong" /><span>ngong</span></label>
+              <label class="chip"><input type="radio" name="ds-label" value="khac" /><span>khac-…</span></label>
+              <label class="chip"><input type="radio" name="ds-label" value="on" /><span>on</span></label>
+            </fieldset>
+            <label class="field" id="ds-other-wrap" hidden>
+              <span class="field-label">Đọc thành từ nào</span>
+              <input id="ds-other" type="text" placeholder="sheep" />
+            </label>
+            <label class="field">
+              <span class="field-label">Người đọc</span>
+              <input id="ds-speaker" type="text" placeholder="lan" />
+            </label>
+          </div>
+
+          <label class="switch">
+            <input id="auto-send" type="checkbox" checked />
+            <span class="switch-track"><span class="switch-knob"></span></span>
+            <span class="switch-text">Auto-send<br /><small>gửi ngay khi dừng ghi</small></span>
           </label>
 
-          <p class="note">
-            Model chạy tuần tự (<span class="mono">concurrency 1</span>) — tool khoá transport khi đang có
-            request.
-          </p>
+          <p class="note" id="mode-note"></p>
+
+          <details class="diag">
+            <summary>Chẩn đoán (không phải đường thiết bị)</summary>
+            <p class="note note-sm">
+              Hai endpoint này chỉ có caller server-to-server. Giữ để soi lỗi, đừng dùng để kết luận
+              về trải nghiệm người dùng.
+            </p>
+            <div id="diag-list" class="diag-list"></div>
+          </details>
         </section>
 
         <!-- ================= OUTPUT ================= -->
-        <section class="module output" aria-label="Kết quả nhận diện">
+        <section class="module output" aria-label="Kết quả">
           <div class="module-head">
-            <h2>Transcript</h2>
+            <h2 id="output-title">Transcript</h2>
             <span id="status-tag" class="module-tag">ready</span>
           </div>
 
           <div class="readout">
+            <span id="verdict" class="verdict" hidden></span>
             <p id="transcript" class="readout-text placeholder">Văn bản server trả về sẽ hiện ở đây…</p>
           </div>
 
           <div class="gauges" id="gauges"></div>
+
+          <div id="dataset-panel" hidden>
+            <div class="ds-head">
+              <span class="field-label">Tiến độ bộ mẫu</span>
+              <span id="ds-total" class="mono"></span>
+            </div>
+            <div id="ds-progress" class="ds-progress"></div>
+            <p id="ds-dir" class="note note-sm"></p>
+          </div>
 
           <details class="raw">
             <summary>JSON thô</summary>
